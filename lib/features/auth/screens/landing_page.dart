@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/colors.dart';
+import './register_screen.dart';
+import './login_screen.dart';
 
 class LandingPage extends StatelessWidget {
   const LandingPage({super.key});
@@ -101,7 +103,13 @@ class LandingPage extends StatelessWidget {
                         Expanded(
                           child: ElevatedButton(
                             onPressed: () {
-                              print("Masuk ditekan");
+                              // Navigasi ke Login Screen
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const LoginScreen(),
+                                ),
+                              );
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primaryBlue,
@@ -127,7 +135,13 @@ class LandingPage extends StatelessWidget {
                         Expanded(
                           child: OutlinedButton(
                             onPressed: () {
-                              print("Daftar ditekan");
+                              // --- NAVIGASI KE REGISTER SCREEN ---
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const RegisterScreen(),
+                                ),
+                              );
                             },
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppColors.primaryBlue,
