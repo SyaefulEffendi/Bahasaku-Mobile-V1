@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:bahasaku_v1/core/constants/colors.dart';
 import 'package:bahasaku_v1/features/auth/screens/register_screen.dart';
+import './dashboard_screen.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:bahasaku_v1/core/api/api_client.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -190,13 +195,92 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // 4. TOMBOL MASUK
+// 4. TOMBOL MASUK
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () {
-                          print("Masuk ditekan");
+                        onPressed: () async {
+                          // 1. Ambil input
+                          final email = _emailController.text;
+                          final password = _passwordController.text;
+
+                          if (email.isEmpty || password.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Email dan Password wajib diisi!')),
+                            );
+                            return;
+                          }
+
+                          // 2. Loading Indicator (Opsional, biar UX bagus)
+                          showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (context) => const Center(child: CircularProgressIndicator()),
+                          );
+
+                          try {
+                            // 3. Kirim Request ke Flask
+                            final response = await http.post(
+                              Uri.parse(ApiClient.login),
+                              headers: {"Content-Type": "application/json"},
+                              body: jsonEncode({
+                                "email": email,
+                                "password": password,
+                                // "remember_me": _isRememberMe // Bisa dikirim jika Flask support
+                              }),
+                            );
+
+                            // Tutup Loading
+                            if (mounted) Navigator.pop(context);
+
+                            // 4. Cek Response
+                            if (response.statusCode == 200) {
+                              final data = jsonDecode(response.body);
+                              final token = data['access_token'];
+                              final userName = data['user']['full_name'];
+
+                              print("Login Sukses! Token: $token");
+
+                              // 5. Simpan Token ke HP (Penyimpanan Lokal)
+                              final prefs = await SharedPreferences.getInstance();
+                              await prefs.setString('token', token);
+                              await prefs.setString('userName', userName);
+
+                              // 6. Pindah ke Dashboard
+                              if (mounted) {
+                                Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const DashboardScreen()),
+                                );
+                              }
+                            } else {
+                              // Login Gagal (Password salah / User tak ditemukan)
+                              final errorData = jsonDecode(response.body);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(errorData['error'] ?? 'Login Gagal'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            // Error Koneksi (Server mati / Beda WiFi)
+                            if (mounted) Navigator.pop(context); // Tutup loading
+                            print("Error Koneksi: $e");
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Gagal terhubung ke server. Pastikan IP benar: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
                         },
+                        style: ElevatedButton.styleFrom(
+                          // ... (style tetap sama)
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primaryBlue,
                           foregroundColor: Colors.white,
