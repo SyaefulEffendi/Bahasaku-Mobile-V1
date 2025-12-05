@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // 1. Import ini
 import 'package:bahasaku_v1/core/constants/colors.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -10,6 +11,22 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
+  String _userName = 'User'; // 2. Variable untuk menampung nama
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData(); // 3. Panggil fungsi ambil data saat layar dibuka
+  }
+
+  // 4. Fungsi mengambil nama dari SharedPreferences
+  Future<void> _loadUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      // Ambil 'userName' yang disimpan saat login, default 'User' jika kosong
+      _userName = prefs.getString('userName') ?? 'User';
+    });
+  }
 
   void _onItemTapped(int index) {
     setState(() {
@@ -31,96 +48,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Kiri: Logo + Judul + Sapaan
+                  // Kiri: Logo & Teks
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // --- BARIS LOGO & JUDUL APLIKASI ---
-                        Row(
-                          children: [
-                            // Logo Bulat
-                            Container(
-                              height: 45,
-                              width: 45,
-                              decoration: const BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Image.asset(
-                                  'assets/images/logo_circle.png',
-                                  fit: BoxFit.contain,
-                                ),
-                              ),
+                        Container(
+                          height: 50,
+                          width: 50,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Image.asset(
+                              'assets/images/logo_circle.png',
+                              fit: BoxFit.contain,
                             ),
-                            const SizedBox(width: 12), // Jarak antara logo dan teks
-                            
-                            // Teks Judul Aplikasi
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Bahasaku',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                      height: 1.0,
-                                    ),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'Sistem Penerjemah Bahasa Isyarat',
-                                    style: TextStyle(
-                                      fontSize: 9, // Ukuran font kecil agar muat
-                                      color: Colors.white70,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
+                        const SizedBox(height: 20),
                         
-                        const SizedBox(height: 24), // Jarak ke Sapaan User
-
-                        // Teks Sapaan
-                        const Text(
-                          'Hi, Username',
-                          style: TextStyle(
+                        // 5. TAMPILKAN NAMA USER DI SINI
+                        Text(
+                          'Hi, $_userName', 
+                          style: const TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
+                        
                         const SizedBox(height: 4),
                         const Text(
                           'Yuk jelajahi Dunia Tuli bersama Evull!',
                           style: TextStyle(
-                            fontSize: 15,
+                            fontSize: 12,
                             color: Colors.white70,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  
-                  // Kanan: Ilustrasi (Sedikit digeser agar tidak tabrakan)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8.0),
-                    child: SizedBox(
-                      height: 150,
-                      width: 150,
-                      child: Image.asset(
-                        'assets/images/header_illustration.png',
-                        fit: BoxFit.contain,
-                        alignment: Alignment.topRight,
-                      ),
+                  // Kanan: Ilustrasi
+                  SizedBox(
+                    height: 110,
+                    width: 110,
+                    child: Image.asset(
+                      'assets/images/header_illustration.png',
+                      fit: BoxFit.contain,
+                      alignment: Alignment.topRight,
                     ),
                   ),
                 ],
@@ -188,9 +168,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       // ================== BAGIAN 3: INFORMASI TERBARU (BIRU BAWAH) ==================
                       Container(
                         width: double.infinity,
-                        // HAPUS atau KOMENTARI baris constraints ini agar tinggi menyesuaikan isi
-                        // constraints: const BoxConstraints(minHeight: 400), 
-                        
                         padding: const EdgeInsets.all(24),
                         decoration: const BoxDecoration(
                           color: AppColors.primaryBlue,
@@ -226,8 +203,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             const SizedBox(height: 16),
 
                             // --- LIST KARTU INFORMASI ---
-                            
-                            // Info 1
                             _buildInfoCard(
                               title: 'Tips Belajar Isyarat Cepat',
                               description: 'Pelajari dasar-dasar gerakan tangan dalam 5 menit sehari.',
@@ -236,7 +211,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             const SizedBox(height: 12),
 
-                            // Info 2
                             _buildInfoCard(
                               title: 'Event Komunitas Tuli',
                               description: 'Ikuti gathering online bersama teman-teman Tuli se-Indonesia.',
@@ -244,7 +218,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               icon: Icons.event,
                             ),
                             
-                            // Spacer bawah dikurangi agar tidak terlalu panjang
                             const SizedBox(height: 30), 
                           ],
                         ),
@@ -336,19 +309,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Ikon Kotak di Kiri
           Container(
             height: 45,
             width: 45,
             decoration: BoxDecoration(
-              color: const Color(0xFFE3F2FD), // Biru sangat muda
+              color: const Color(0xFFE3F2FD), 
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: AppColors.primaryBlue, size: 24),
           ),
           const SizedBox(width: 16),
-          
-          // Teks Judul & Deskripsi
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

@@ -2,7 +2,7 @@
 class ApiClient {
   // GANTI IP INI SESUAI IPCONFIG LAPTOP ANDA
   // Jangan pakai localhost untuk HP Fisik!
-  static const String baseUrl = 'http://192.168.23.207:5000/api'; 
+  static const String baseUrl = 'http://10.0.2.2:8080/api'; 
   
   // Endpoint Auth
   static const String login = '$baseUrl/users/login';

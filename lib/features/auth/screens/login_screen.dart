@@ -1,11 +1,14 @@
-import 'package:flutter/material.dart';
-import 'package:bahasaku_v1/core/constants/colors.dart';
-import 'package:bahasaku_v1/features/auth/screens/register_screen.dart';
-import './dashboard_screen.dart';
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:bahasaku_v1/core/api/api_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// IMPORT LIBRARY ALERT BARU
+import 'package:quickalert/quickalert.dart'; 
+
+import 'package:bahasaku_v1/core/constants/colors.dart';
+import 'package:bahasaku_v1/core/api/api_client.dart';
+import 'package:bahasaku_v1/features/auth/screens/register_screen.dart';
+import 'package:bahasaku_v1/features/home/screens/dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,25 +18,23 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // Controller
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  // State
   bool _isPasswordVisible = false;
   bool _isRememberMe = false;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFCBE7FD), // Background Biru Muda
+      backgroundColor: const Color(0xFFCBE7FD),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // --- HEADER (Tombol Back & Judul Masuk) ---
+              // --- HEADER ---
               Row(
                 children: [
                   Container(
@@ -66,17 +67,17 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 40), // Penyeimbang
+                  const SizedBox(width: 40),
                 ],
               ),
               const SizedBox(height: 30),
 
-              // --- LOGO BAHASAKU DALAM KOTAK ---
+              // --- LOGO ---
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(24), // Sudut tumpul
+                  borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.05),
@@ -87,13 +88,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 child: Image.asset(
                   'assets/images/logo_bahasaku.png',
-                  height: 50, 
+                  height: 50,
                   fit: BoxFit.contain,
                 ),
               ),
               const SizedBox(height: 30),
 
-              // --- TEKS SAMBUTAN ---
+              // --- TEXT ---
               const Text(
                 'Selamat Datang Kembali!',
                 style: TextStyle(
@@ -113,7 +114,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 30),
 
-              // --- KARTU PUTIH (FORM LOGIN) ---
+              // --- FORM ---
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
@@ -130,7 +131,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 child: Column(
                   children: [
-                    // 1. Email
                     _buildTextField(
                       controller: _emailController,
                       hint: 'Alamat Email',
@@ -138,8 +138,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       inputType: TextInputType.emailAddress,
                     ),
                     const SizedBox(height: 15),
-
-                    // 2. Password
                     _buildTextField(
                       controller: _passwordController,
                       hint: 'Kata Sandi',
@@ -152,8 +150,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       },
                     ),
                     const SizedBox(height: 10),
-
-                    // 3. Ingat Saya & Lupa Password
                     Row(
                       children: [
                         SizedBox(
@@ -195,92 +191,107 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 20),
 
-// 4. TOMBOL MASUK
+                    // --- TOMBOL MASUK DENGAN ANIMASI ALERT ---
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () async {
-                          // 1. Ambil input
                           final email = _emailController.text;
                           final password = _passwordController.text;
 
                           if (email.isEmpty || password.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Email dan Password wajib diisi!')),
+                            // Alert Error Sederhana
+                            QuickAlert.show(
+                              context: context,
+                              type: QuickAlertType.warning,
+                              title: 'Oops...',
+                              text: 'Email dan Password wajib diisi!',
+                              confirmBtnColor: AppColors.primaryBlue,
                             );
                             return;
                           }
 
-                          // 2. Loading Indicator (Opsional, biar UX bagus)
-                          showDialog(
+                          // Tampilkan Loading Alert
+                          QuickAlert.show(
                             context: context,
-                            barrierDismissible: false,
-                            builder: (context) => const Center(child: CircularProgressIndicator()),
+                            type: QuickAlertType.loading,
+                            title: 'Mohon Tunggu',
+                            text: 'Sedang memproses login...',
+                            disableBackBtn: true, // Biar gak bisa di-cancel
                           );
 
                           try {
-                            // 3. Kirim Request ke Flask
                             final response = await http.post(
                               Uri.parse(ApiClient.login),
                               headers: {"Content-Type": "application/json"},
                               body: jsonEncode({
                                 "email": email,
                                 "password": password,
-                                // "remember_me": _isRememberMe // Bisa dikirim jika Flask support
                               }),
                             );
 
-                            // Tutup Loading
-                            if (mounted) Navigator.pop(context);
+                            // Tutup Loading (PENTING: Gunakan rootNavigator: true)
+                            if (context.mounted) {
+                              Navigator.of(context, rootNavigator: true).pop();
+                            }
 
-                            // 4. Cek Response
                             if (response.statusCode == 200) {
                               final data = jsonDecode(response.body);
                               final token = data['access_token'];
                               final userName = data['user']['full_name'];
 
-                              print("Login Sukses! Token: $token");
-
-                              // 5. Simpan Token ke HP (Penyimpanan Lokal)
+                              // Simpan Token
                               final prefs = await SharedPreferences.getInstance();
                               await prefs.setString('token', token);
                               await prefs.setString('userName', userName);
 
-                              // 6. Pindah ke Dashboard
-                              if (mounted) {
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(builder: (context) => const DashboardScreen()),
+                              // TAMPILKAN ALERT SUKSES
+                              if (context.mounted) {
+                                await QuickAlert.show(
+                                  context: context,
+                                  type: QuickAlertType.success,
+                                  title: 'Berhasil!',
+                                  text: 'Selamat datang kembali, $userName',
+                                  confirmBtnColor: AppColors.primaryBlue,
+                                  confirmBtnText: 'Lanjut',
+                                  onConfirmBtnTap: () {
+                                    // Pindah ke Dashboard setelah klik OK
+                                    Navigator.of(context).pop(); // Tutup Alert
+                                    Navigator.pushReplacement(
+                                      context,
+                                      MaterialPageRoute(builder: (context) => const DashboardScreen()),
+                                    );
+                                  },
                                 );
                               }
                             } else {
-                              // Login Gagal (Password salah / User tak ditemukan)
                               final errorData = jsonDecode(response.body);
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(errorData['error'] ?? 'Login Gagal'),
-                                    backgroundColor: Colors.red,
-                                  ),
+                              if (context.mounted) {
+                                QuickAlert.show(
+                                  context: context,
+                                  type: QuickAlertType.error,
+                                  title: 'Gagal Login',
+                                  text: errorData['error'] ?? 'Email atau Password salah.',
+                                  confirmBtnColor: Colors.red,
                                 );
                               }
                             }
                           } catch (e) {
-                            // Error Koneksi (Server mati / Beda WiFi)
-                            if (mounted) Navigator.pop(context); // Tutup loading
-                            print("Error Koneksi: $e");
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Gagal terhubung ke server. Pastikan IP benar: $e'),
-                                  backgroundColor: Colors.red,
-                                ),
+                            // Tutup Loading jika error koneksi
+                            if (context.mounted) {
+                              Navigator.of(context, rootNavigator: true).pop();
+                            }
+                            if (context.mounted) {
+                              QuickAlert.show(
+                                context: context,
+                                type: QuickAlertType.error,
+                                title: 'Koneksi Gagal',
+                                text: 'Tidak dapat terhubung ke server.\nPastikan IP benar.\nError: $e',
+                                confirmBtnColor: Colors.red,
                               );
                             }
                           }
                         },
-                        style: ElevatedButton.styleFrom(
-                          // ... (style tetap sama)
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primaryBlue,
                           foregroundColor: Colors.white,
@@ -301,11 +312,8 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
 
               const SizedBox(height: 20),
-
-              // --- FOOTER: BELUM PUNYA AKUN? ---
               GestureDetector(
                 onTap: () {
-                  // Pindah ke Register Screen
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(builder: (context) => const RegisterScreen()),
@@ -327,10 +335,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 20),
-
-              // --- DIVIDER "ATAU" ---
+              
+              // --- Divider & Google Button (Biarkan sama) ---
               const Row(
                 children: [
                   Expanded(child: Divider(color: Colors.black12)),
@@ -338,20 +345,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
                       'Atau',
-                      style: TextStyle(
-                        color: AppColors.textGrey,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
+                      style: TextStyle(color: AppColors.textGrey, fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                   ),
                   Expanded(child: Divider(color: Colors.black12)),
                 ],
               ),
-
               const SizedBox(height: 20),
-
-              // --- TOMBOL GOOGLE ---
               Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
@@ -378,18 +378,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Image.asset(
-                            'assets/images/google_logo.png', // Pastikan nama file benar
+                            'assets/images/google_logo.png',
                             height: 24,
                             width: 24,
                           ),
                           const SizedBox(width: 12),
                           const Text(
                             'Masuk dengan Google',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textDark,
-                            ),
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textDark),
                           ),
                         ],
                       ),
@@ -397,7 +393,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 20), // Padding bawah
+              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -405,7 +401,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // --- WIDGET HELPER ---
   Widget _buildTextField({
     required TextEditingController controller,
     required String hint,

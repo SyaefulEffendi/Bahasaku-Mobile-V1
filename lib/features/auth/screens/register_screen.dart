@@ -1,5 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:quickalert/quickalert.dart'; // Import QuickAlert
+
 import 'package:bahasaku_v1/core/constants/colors.dart';
+import 'package:bahasaku_v1/core/api/api_client.dart';
 import 'package:bahasaku_v1/features/auth/screens/login_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -10,14 +15,14 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  // Controller untuk mengambil input user
+  // Controller
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
   final TextEditingController _dateController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  // State untuk interaksi UI
+  // State
   String _selectedUserType = ''; 
   bool _isPasswordVisible = false;
 
@@ -31,7 +36,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- HEADER (Tombol Back & Judul) ---
+              // --- HEADER ---
               Row(
                 children: [
                   Container(
@@ -69,7 +74,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 30),
 
-              // --- TITLE & SUBTITLE ---
+              // --- TITLE ---
               const Center(
                 child: Column(
                   children: [
@@ -95,7 +100,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 30),
 
-              // --- FORM CONTAINER (Card Putih) ---
+              // --- FORM ---
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
@@ -113,7 +118,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 1. Nama Lengkap
                     _buildTextField(
                       label: 'Nama Lengkap',
                       controller: _nameController,
@@ -121,7 +125,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // 2. Tipe Pengguna (3 Pilihan: Tuli, Dengar, Umum)
                     const Text(
                       'Tipe Pengguna',
                       style: TextStyle(
@@ -131,8 +134,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 10),
                     
-                    // --- UPDATE: MENGGUNAKAN 3 KOLOM ---
-                    IntrinsicHeight( // Agar tinggi kartu seragam
+                    IntrinsicHeight( 
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -143,7 +145,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               icon: Icons.hearing_disabled,
                             ),
                           ),
-                          const SizedBox(width: 8), // Jarak diperkecil agar muat 3
+                          const SizedBox(width: 8), 
                           Expanded(
                             child: _buildUserTypeCard(
                               label: 'Dengar',
@@ -164,7 +166,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // 3. Tempat Tinggal
                     _buildTextField(
                       label: 'Tempat Tinggal',
                       controller: _locationController,
@@ -173,7 +174,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 15),
 
-                    // 4. Tanggal Lahir
                     _buildTextField(
                       label: 'Tanggal Lahir',
                       controller: _dateController,
@@ -189,6 +189,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         );
                         if (pickedDate != null) {
                           setState(() {
+                            // Format YYYY-MM-DD
                             _dateController.text = "${pickedDate.toLocal()}".split(' ')[0];
                           });
                         }
@@ -196,7 +197,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 15),
 
-                    // 5. Email
                     _buildTextField(
                       label: 'Alamat Email',
                       controller: _emailController,
@@ -206,7 +206,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 15),
 
-                    // 6. Kata Sandi
                     _buildTextField(
                       label: 'Kata Sandi',
                       controller: _passwordController,
@@ -221,13 +220,104 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 30),
 
-                    // TOMBOL DAFTAR
+                    // --- TOMBOL DAFTAR (INTEGRASI) ---
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () {
-                          // Debug print untuk memastikan nilai terpilih
-                          print("Daftar ditekan. Tipe: $_selectedUserType");
+                        onPressed: () async {
+                          // 1. Validasi Input
+                          if (_nameController.text.isEmpty || 
+                              _emailController.text.isEmpty || 
+                              _passwordController.text.isEmpty ||
+                              _selectedUserType.isEmpty) {
+                            
+                            QuickAlert.show(
+                              context: context,
+                              type: QuickAlertType.warning,
+                              title: 'Data Belum Lengkap',
+                              text: 'Mohon isi nama, email, password, dan pilih tipe pengguna.',
+                              confirmBtnColor: AppColors.primaryBlue,
+                            );
+                            return;
+                          }
+
+                          // 2. Loading
+                          QuickAlert.show(
+                            context: context,
+                            type: QuickAlertType.loading,
+                            title: 'Mendaftar...',
+                            text: 'Mohon tunggu sebentar',
+                            disableBackBtn: true,
+                          );
+
+                          try {
+                            // 3. Kirim ke Flask
+                            final response = await http.post(
+                              Uri.parse(ApiClient.register),
+                              headers: {"Content-Type": "application/json"},
+                              body: jsonEncode({
+                                "full_name": _nameController.text,
+                                "email": _emailController.text,
+                                "password": _passwordController.text,
+                                "user_type": _selectedUserType,
+                                "location": _locationController.text,
+                                "birth_date": _dateController.text, // Format YYYY-MM-DD
+                              }),
+                            );
+
+                            // Tutup Loading
+                            if (context.mounted) {
+                              Navigator.of(context, rootNavigator: true).pop();
+                            }
+
+                            // 4. Cek Response
+                            if (response.statusCode == 201) {
+                              // SUKSES
+                              if (context.mounted) {
+                                await QuickAlert.show(
+                                  context: context,
+                                  type: QuickAlertType.success,
+                                  title: 'Pendaftaran Berhasil!',
+                                  text: 'Silakan login dengan akun baru Anda.',
+                                  confirmBtnColor: AppColors.primaryBlue,
+                                  onConfirmBtnTap: () {
+                                    // Tutup Alert & Pindah ke Login
+                                    Navigator.of(context).pop(); 
+                                    Navigator.pushReplacement(
+                                      context,
+                                      MaterialPageRoute(builder: (context) => const LoginScreen()),
+                                    );
+                                  },
+                                );
+                              }
+                            } else {
+                              // GAGAL (Email sudah ada dll)
+                              final errorData = jsonDecode(response.body);
+                              if (context.mounted) {
+                                QuickAlert.show(
+                                  context: context,
+                                  type: QuickAlertType.error,
+                                  title: 'Gagal Mendaftar',
+                                  text: errorData['error'] ?? 'Terjadi kesalahan.',
+                                  confirmBtnColor: Colors.red,
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            // Error Koneksi
+                            if (context.mounted) {
+                              Navigator.of(context, rootNavigator: true).pop(); // Tutup loading
+                            }
+                            if (context.mounted) {
+                              QuickAlert.show(
+                                context: context,
+                                type: QuickAlertType.error,
+                                title: 'Koneksi Gagal',
+                                text: 'Tidak dapat terhubung ke server.\n$e',
+                                confirmBtnColor: Colors.red,
+                              );
+                            }
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primaryBlue,
@@ -343,7 +433,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         });
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4), // Padding disesuaikan
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4), 
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
@@ -377,7 +467,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               desc,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 9, // Font diperkecil agar muat 3 kolom
+                fontSize: 9, 
                 color: Colors.grey.shade600,
                 height: 1.2,
               ),
