@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-// IMPORT LIBRARY ALERT BARU
 import 'package:quickalert/quickalert.dart'; 
 
 import 'package:bahasaku_v1/core/constants/colors.dart';
@@ -18,7 +17,9 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _emailController = TextEditingController();
+  // Controller
+  // Kita pakai satu controller untuk identifier (bisa email atau no hp)
+  final TextEditingController _identifierController = TextEditingController(); 
   final TextEditingController _passwordController = TextEditingController();
 
   bool _isPasswordVisible = false;
@@ -131,13 +132,18 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 child: Column(
                   children: [
+                    // 1. Email atau No Telepon (DIGABUNG)
                     _buildTextField(
-                      controller: _emailController,
-                      hint: 'Alamat Email',
-                      suffixIcon: Icons.email_outlined,
-                      inputType: TextInputType.emailAddress,
+                      controller: _identifierController,
+                      // Label diubah agar user tahu bisa pakai keduanya
+                      hint: 'Email atau Nomor Telepon', 
+                      suffixIcon: Icons.person_outline, 
+                      // Input type general agar bisa huruf (@) dan angka
+                      inputType: TextInputType.emailAddress, 
                     ),
                     const SizedBox(height: 15),
+
+                    // 2. Password
                     _buildTextField(
                       controller: _passwordController,
                       hint: 'Kata Sandi',
@@ -150,6 +156,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       },
                     ),
                     const SizedBox(height: 10),
+                    
+                    // 3. Ingat Saya & Lupa Password
                     Row(
                       children: [
                         SizedBox(
@@ -191,33 +199,31 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // --- TOMBOL MASUK DENGAN ANIMASI ALERT ---
+                    // --- TOMBOL MASUK ---
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () async {
-                          final email = _emailController.text;
+                          final identifier = _identifierController.text; // Bisa email/no hp
                           final password = _passwordController.text;
 
-                          if (email.isEmpty || password.isEmpty) {
-                            // Alert Error Sederhana
+                          if (identifier.isEmpty || password.isEmpty) {
                             QuickAlert.show(
                               context: context,
                               type: QuickAlertType.warning,
                               title: 'Oops...',
-                              text: 'Email dan Password wajib diisi!',
+                              text: 'Email/No. Telepon dan Password wajib diisi!',
                               confirmBtnColor: AppColors.primaryBlue,
                             );
                             return;
                           }
 
-                          // Tampilkan Loading Alert
                           QuickAlert.show(
                             context: context,
                             type: QuickAlertType.loading,
                             title: 'Mohon Tunggu',
                             text: 'Sedang memproses login...',
-                            disableBackBtn: true, // Biar gak bisa di-cancel
+                            disableBackBtn: true,
                           );
 
                           try {
@@ -225,12 +231,13 @@ class _LoginScreenState extends State<LoginScreen> {
                               Uri.parse(ApiClient.login),
                               headers: {"Content-Type": "application/json"},
                               body: jsonEncode({
-                                "email": email,
+                                // Kirim sebagai 'email' dulu ke backend (karena backend saat ini baru cek email)
+                                // Nanti backend perlu diupdate agar bisa cek phone_number juga
+                                "email": identifier, 
                                 "password": password,
                               }),
                             );
 
-                            // Tutup Loading (PENTING: Gunakan rootNavigator: true)
                             if (context.mounted) {
                               Navigator.of(context, rootNavigator: true).pop();
                             }
@@ -238,25 +245,27 @@ class _LoginScreenState extends State<LoginScreen> {
                             if (response.statusCode == 200) {
                               final data = jsonDecode(response.body);
                               final token = data['access_token'];
-                              final userName = data['user']['full_name'];
+                              final user = data['user'];
 
-                              // Simpan Token
                               final prefs = await SharedPreferences.getInstance();
                               await prefs.setString('token', token);
-                              await prefs.setString('userName', userName);
+                              await prefs.setString('userName', user['full_name']);
+                              await prefs.setString('email', user['email']);
+                              if (user['phone_number'] != null) {
+                                await prefs.setString('phoneNumber', user['phone_number']);
+                              } else {
+                                await prefs.setString('phoneNumber', 'Tidak ada No Telepon');
+                              }
 
-                              // TAMPILKAN ALERT SUKSES
                               if (context.mounted) {
                                 await QuickAlert.show(
                                   context: context,
                                   type: QuickAlertType.success,
                                   title: 'Berhasil!',
-                                  text: 'Selamat datang kembali, $userName',
+                                  text: 'Selamat datang kembali, ${user['full_name']}',
                                   confirmBtnColor: AppColors.primaryBlue,
-                                  confirmBtnText: 'Lanjut',
                                   onConfirmBtnTap: () {
-                                    // Pindah ke Dashboard setelah klik OK
-                                    Navigator.of(context).pop(); // Tutup Alert
+                                    Navigator.of(context).pop();
                                     Navigator.pushReplacement(
                                       context,
                                       MaterialPageRoute(builder: (context) => const DashboardScreen()),
@@ -271,13 +280,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                   context: context,
                                   type: QuickAlertType.error,
                                   title: 'Gagal Login',
-                                  text: errorData['error'] ?? 'Email atau Password salah.',
+                                  text: errorData['error'] ?? 'Akun tidak ditemukan.',
                                   confirmBtnColor: Colors.red,
                                 );
                               }
                             }
                           } catch (e) {
-                            // Tutup Loading jika error koneksi
                             if (context.mounted) {
                               Navigator.of(context, rootNavigator: true).pop();
                             }
@@ -286,7 +294,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 context: context,
                                 type: QuickAlertType.error,
                                 title: 'Koneksi Gagal',
-                                text: 'Tidak dapat terhubung ke server.\nPastikan IP benar.\nError: $e',
+                                text: 'Tidak dapat terhubung ke server.\nError: $e',
                                 confirmBtnColor: Colors.red,
                               );
                             }
@@ -310,7 +318,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                 ),
               ),
-
+              // ... (Sisa kode sama: Footer Register, Google Login, dll) ...
               const SizedBox(height: 20),
               GestureDetector(
                 onTap: () {
@@ -336,8 +344,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              
-              // --- Divider & Google Button (Biarkan sama) ---
               const Row(
                 children: [
                   Expanded(child: Divider(color: Colors.black12)),

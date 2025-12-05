@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:quickalert/quickalert.dart'; // Import QuickAlert
+import 'package:quickalert/quickalert.dart'; 
 
 import 'package:bahasaku_v1/core/constants/colors.dart';
 import 'package:bahasaku_v1/core/api/api_client.dart';
@@ -20,6 +20,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _locationController = TextEditingController();
   final TextEditingController _dateController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
   // State
@@ -175,6 +176,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     const SizedBox(height: 15),
 
                     _buildTextField(
+                      label: 'Nomor Telepon',
+                      controller: _phoneController,
+                      hint: 'Contoh: 08123456789',
+                      suffixIcon: Icons.phone,
+                      inputType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: 15),
+
+                    _buildTextField(
                       label: 'Tanggal Lahir',
                       controller: _dateController,
                       hint: 'Tanggal Lahir',
@@ -189,7 +199,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         );
                         if (pickedDate != null) {
                           setState(() {
-                            // Format YYYY-MM-DD
                             _dateController.text = "${pickedDate.toLocal()}".split(' ')[0];
                           });
                         }
@@ -220,28 +229,44 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 30),
 
-                    // --- TOMBOL DAFTAR (INTEGRASI) ---
+                    // --- TOMBOL DAFTAR ---
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () async {
-                          // 1. Validasi Input
+                          // 1. Validasi Input Kosong
                           if (_nameController.text.isEmpty || 
                               _emailController.text.isEmpty || 
                               _passwordController.text.isEmpty ||
+                              _phoneController.text.isEmpty ||
                               _selectedUserType.isEmpty) {
                             
                             QuickAlert.show(
                               context: context,
                               type: QuickAlertType.warning,
                               title: 'Data Belum Lengkap',
-                              text: 'Mohon isi nama, email, password, dan pilih tipe pengguna.',
+                              text: 'Nama, Email, Password, No. Telp, dan Tipe Pengguna wajib diisi.',
                               confirmBtnColor: AppColors.primaryBlue,
                             );
                             return;
                           }
 
-                          // 2. Loading
+                          // 2. Validasi Format Email (Regex Check)
+                          // Mengecek apakah ada karakter, diikuti @, diikuti karakter, titik, dan domain (minimal 2 huruf)
+                          final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                          
+                          if (!emailRegex.hasMatch(_emailController.text.trim())) {
+                            QuickAlert.show(
+                              context: context,
+                              type: QuickAlertType.warning,
+                              title: 'Email Tidak Valid',
+                              text: 'Mohon masukkan email yang valid.\n(Contoh: nama@gmail.com, nama@yahoo.com)',
+                              confirmBtnColor: AppColors.primaryBlue,
+                            );
+                            return;
+                          }
+
+                          // Loading
                           QuickAlert.show(
                             context: context,
                             type: QuickAlertType.loading,
@@ -251,7 +276,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           );
 
                           try {
-                            // 3. Kirim ke Flask
                             final response = await http.post(
                               Uri.parse(ApiClient.register),
                               headers: {"Content-Type": "application/json"},
@@ -261,18 +285,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 "password": _passwordController.text,
                                 "user_type": _selectedUserType,
                                 "location": _locationController.text,
-                                "birth_date": _dateController.text, // Format YYYY-MM-DD
+                                "phone_number": _phoneController.text,
+                                "birth_date": _dateController.text,
                               }),
                             );
 
-                            // Tutup Loading
                             if (context.mounted) {
                               Navigator.of(context, rootNavigator: true).pop();
                             }
 
-                            // 4. Cek Response
                             if (response.statusCode == 201) {
-                              // SUKSES
                               if (context.mounted) {
                                 await QuickAlert.show(
                                   context: context,
@@ -281,7 +303,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   text: 'Silakan login dengan akun baru Anda.',
                                   confirmBtnColor: AppColors.primaryBlue,
                                   onConfirmBtnTap: () {
-                                    // Tutup Alert & Pindah ke Login
                                     Navigator.of(context).pop(); 
                                     Navigator.pushReplacement(
                                       context,
@@ -291,7 +312,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 );
                               }
                             } else {
-                              // GAGAL (Email sudah ada dll)
                               final errorData = jsonDecode(response.body);
                               if (context.mounted) {
                                 QuickAlert.show(
@@ -304,9 +324,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               }
                             }
                           } catch (e) {
-                            // Error Koneksi
                             if (context.mounted) {
-                              Navigator.of(context, rootNavigator: true).pop(); // Tutup loading
+                              Navigator.of(context, rootNavigator: true).pop();
                             }
                             if (context.mounted) {
                               QuickAlert.show(
@@ -372,7 +391,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // --- WIDGET HELPER: TEXT FIELD ---
   Widget _buildTextField({
     required String label,
     required TextEditingController controller,
@@ -418,7 +436,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // --- WIDGET HELPER: KARTU TIPE PENGGUNA ---
   Widget _buildUserTypeCard({
     required String label,
     required String desc,
