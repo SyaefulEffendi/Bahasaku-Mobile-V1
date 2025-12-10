@@ -249,12 +249,17 @@ class _LoginScreenState extends State<LoginScreen> {
 
                               final prefs = await SharedPreferences.getInstance();
                               await prefs.setString('token', token);
+                              await prefs.setInt('userId', user['id']);
                               await prefs.setString('userName', user['full_name']);
                               await prefs.setString('email', user['email']);
                               if (user['phone_number'] != null) {
                                 await prefs.setString('phoneNumber', user['phone_number']);
                               } else {
                                 await prefs.setString('phoneNumber', 'Tidak ada No Telepon');
+                              }
+                              // Simpan URL Foto Profil (Sesuai key dari user_model.py: 'profile_pic_url')
+                              if (user['profile_pic_url'] != null) {
+                                await prefs.setString('photoProfile', user['profile_pic_url']);
                               }
 
                               if (context.mounted) {

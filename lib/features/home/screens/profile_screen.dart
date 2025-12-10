@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:bahasaku_v1/core/constants/colors.dart';
 import 'package:bahasaku_v1/features/auth/screens/login_screen.dart';
 import 'package:quickalert/quickalert.dart'; 
+import 'package:bahasaku_v1/features/home/screens/edit_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -15,7 +16,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // Variabel Data User
   String _userName = 'Username';
   String _email = 'username@gmail.com';
-  String _phone = 'Tidak ada No Telepon'; // Variabel baru untuk No HP
+  String _phone = 'Tidak ada No Telepon';
+  
+  // Variabel baru untuk menampung URL Foto
+  String? _photoUrl; 
   
   bool _isNotificationOn = true; 
 
@@ -33,6 +37,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _userName = prefs.getString('userName') ?? 'Username';
       _email = prefs.getString('email') ?? 'username@gmail.com';
       _phone = prefs.getString('phoneNumber') ?? 'Tidak ada No Telepon';
+
+      // --- LOGIKA BARU: AMBIL DAN PROSES URL FOTO ---
+      String? rawUrl = prefs.getString('photoProfile');
+      
+      if (rawUrl != null && rawUrl.isNotEmpty) {
+        // Jika berjalan di Emulator Android, localhost harus diganti 10.0.2.2
+        if (rawUrl.contains('localhost')) {
+          _photoUrl = rawUrl.replaceAll('localhost', '10.0.2.2');
+        } else {
+          _photoUrl = rawUrl;
+        }
+      }
     });
   }
 
@@ -92,17 +108,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 3),
-                          image: const DecorationImage(
-                            image: AssetImage('assets/images/header_illustration.png'), 
+                          // --- LOGIKA TAMPILAN GAMBAR ---
+                          image: DecorationImage(
+                            image: (_photoUrl != null && _photoUrl!.isNotEmpty)
+                                ? NetworkImage(_photoUrl!) as ImageProvider // Pakai URL jika ada
+                                : const AssetImage('assets/images/header_illustration.png'), // Default jika kosong
                             fit: BoxFit.cover,
                             alignment: Alignment.topCenter,
+                            // Mencegah crash jika link gambar rusak
+                            onError: (exception, stackTrace) {
+                              debugPrint("Gagal memuat gambar profil: $exception");
+                            },
                           ),
                         ),
                       ),
                       const SizedBox(width: 20),
                       Expanded(
                         child: Text(
-                          _userName, // Data Nama Dinamis
+                          _userName, 
                           style: const TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
@@ -120,7 +143,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _buildGlassInfoCard(
                     icon: Icons.email_outlined,
                     label: 'Email',
-                    value: _email, // Data Email Dinamis
+                    value: _email, 
                   ),
                   const SizedBox(height: 15),
 
@@ -128,7 +151,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _buildGlassInfoCard(
                     icon: Icons.phone_outlined,
                     label: 'Telepon',
-                    value: _phone, // Data Telepon Dinamis
+                    value: _phone, 
                   ),
                 ],
               ),
@@ -151,11 +174,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 15),
                   _buildMenuItem(
-                    icon: Icons.person,
-                    title: 'Profil',
-                    subtitle: 'Kelola informasi pribadi Anda',
-                    onTap: () {},
-                  ),
+                  icon: Icons.person,
+                  title: 'Profil',
+                  subtitle: 'Kelola informasi pribadi Anda',
+                  onTap: () async {
+                    // Navigasi ke Edit Profile dan tunggu hasilnya
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const EditProfileScreen()),
+                    );
+
+                    // Jika result == true (artinya user habis simpan data), refresh halaman ini
+                    if (result == true) {
+                      _loadUserData(); 
+                    }
+                  },
+                ),
                   const SizedBox(height: 15),
                   _buildMenuItem(
                     icon: Icons.headset_mic,
@@ -264,7 +298,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Icon(icon, color: AppColors.primaryBlue, size: 24),
           ),
           const SizedBox(width: 12),
-          // Menggunakan Expanded agar teks panjang tidak overflow (error kuning hitam)
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -316,7 +349,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         child: Row(
           children: [
-            // Ikon Kiri (Background Kotak)
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
@@ -331,7 +363,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(width: 16),
             
-            // Teks Judul & Subjudul
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -355,7 +386,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            // Bagian Kanan (Panah atau Switch)
             if (isSwitch)
               Switch(
                 value: switchValue,
