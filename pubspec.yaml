@@ -38,6 +38,12 @@ dependencies:
   http: ^1.6.0
   quickalert: ^1.1.0
   intl: ^0.20.2
+  
+  # Dependencies tambahan untuk fitur Video to Text (Kamera & File)
+  camera: ^0.10.6
+  image_picker: ^1.0.7
+  path_provider: ^2.1.2
+  path: ^1.9.0
 
 dev_dependencies:
   flutter_test:

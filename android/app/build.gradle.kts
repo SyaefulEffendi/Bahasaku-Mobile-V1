@@ -24,7 +24,11 @@ android {
         applicationId = "com.example.bahasaku_v1"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        
+        //bawaan:
+        //minSdk = flutter.minSdkVersion
+        // PERUBAHAN DISINI: Diubah ke 21 agar support plugin kamera
+        minSdk = flutter.minSdkVersion 
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

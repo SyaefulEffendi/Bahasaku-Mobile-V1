@@ -18,7 +18,6 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   // Controller
-  // Kita pakai satu controller untuk identifier (bisa email atau no hp)
   final TextEditingController _identifierController = TextEditingController(); 
   final TextEditingController _passwordController = TextEditingController();
 
@@ -132,13 +131,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 child: Column(
                   children: [
-                    // 1. Email atau No Telepon (DIGABUNG)
+                    // 1. Email atau No Telepon
                     _buildTextField(
                       controller: _identifierController,
-                      // Label diubah agar user tahu bisa pakai keduanya
                       hint: 'Email atau Nomor Telepon', 
                       suffixIcon: Icons.person_outline, 
-                      // Input type general agar bisa huruf (@) dan angka
                       inputType: TextInputType.emailAddress, 
                     ),
                     const SizedBox(height: 15),
@@ -204,7 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () async {
-                          final identifier = _identifierController.text; // Bisa email/no hp
+                          final identifier = _identifierController.text;
                           final password = _passwordController.text;
 
                           if (identifier.isEmpty || password.isEmpty) {
@@ -231,8 +228,6 @@ class _LoginScreenState extends State<LoginScreen> {
                               Uri.parse(ApiClient.login),
                               headers: {"Content-Type": "application/json"},
                               body: jsonEncode({
-                                // Kirim sebagai 'email' dulu ke backend (karena backend saat ini baru cek email)
-                                // Nanti backend perlu diupdate agar bisa cek phone_number juga
                                 "email": identifier, 
                                 "password": password,
                               }),
@@ -248,19 +243,37 @@ class _LoginScreenState extends State<LoginScreen> {
                               final user = data['user'];
 
                               final prefs = await SharedPreferences.getInstance();
+                              
+                              // ====================================================
+                              // PENYIMPANAN DATA LENGKAP (UPDATE)
+                              // ====================================================
                               await prefs.setString('token', token);
                               await prefs.setInt('userId', user['id']);
                               await prefs.setString('userName', user['full_name']);
                               await prefs.setString('email', user['email']);
-                              if (user['phone_number'] != null) {
+                              
+                              // Simpan Role & User Type
+                              await prefs.setString('role', user['role'] ?? 'User');
+                              await prefs.setString('userType', user['user_type'] ?? 'Umum');
+
+                              // Simpan Tempat Tinggal (Location)
+                              await prefs.setString('location', user['location'] ?? '');
+
+                              // Simpan Tanggal Lahir (Birth Date)
+                              await prefs.setString('birthDate', user['birth_date'] ?? '');
+
+                              // Simpan No Telepon
+                              if (user['phone_number'] != null && user['phone_number'] != "") {
                                 await prefs.setString('phoneNumber', user['phone_number']);
                               } else {
                                 await prefs.setString('phoneNumber', 'Tidak ada No Telepon');
                               }
-                              // Simpan URL Foto Profil (Sesuai key dari user_model.py: 'profile_pic_url')
+
+                              // Simpan Foto Profil
                               if (user['profile_pic_url'] != null) {
                                 await prefs.setString('photoProfile', user['profile_pic_url']);
                               }
+                              // ====================================================
 
                               if (context.mounted) {
                                 await QuickAlert.show(
@@ -323,7 +336,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                 ),
               ),
-              // ... (Sisa kode sama: Footer Register, Google Login, dll) ...
               const SizedBox(height: 20),
               GestureDetector(
                 onTap: () {

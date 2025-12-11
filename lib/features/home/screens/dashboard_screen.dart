@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:bahasaku_v1/core/constants/colors.dart';
-// Import halaman Informasi yang baru dibuat
 import 'package:bahasaku_v1/features/home/screens/information_screen.dart';
 import 'package:bahasaku_v1/features/home/screens/profile_screen.dart';
+// IMPORT BARU: Import file VideoToTextScreen agar bisa dipanggil
+import 'package:bahasaku_v1/features/home/screens/video_to_text_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -42,13 +43,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       body: SafeArea(
         bottom: false,
         // LOGIKA SWITCHING HALAMAN
-        // Jika index 0 -> Tampilkan Home
-        // Jika index 1 -> Tampilkan InformasiScreen
-        // Jika index 2 -> Tampilkan Placeholder Akun
         child: _selectedIndex == 0 
             ? _buildHomeContent() 
             : _selectedIndex == 1 
-                ? const InformationScreen() // Panggil File Baru tadi
+                ? const InformationScreen() 
                 : const ProfileScreen(),
       ),
       
@@ -146,7 +144,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
                             _buildMenuButton(title: 'Text to Video', imagePath: 'assets/images/menu_text_to_video.png', onTap: () {}, imageSize: 85.0),
-                            _buildMenuButton(title: 'Video to Text', imagePath: 'assets/images/menu_video_to_text.png', onTap: () {}, imageSize: 55.0),
+                            
+                            // === TOMBOL VIDEO TO TEXT ===
+                            _buildMenuButton(
+                              title: 'Video to Text', 
+                              imagePath: 'assets/images/menu_video_to_text.png', 
+                              onTap: () {
+                                // NAVIGASI KE SCREEN VIDEO TO TEXT
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const VideoToTextScreen()),
+                                );
+                              }, 
+                              imageSize: 55.0
+                            ),
                           ],
                         ),
                         const SizedBox(height: 20),
