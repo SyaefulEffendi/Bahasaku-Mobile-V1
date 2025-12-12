@@ -44,10 +44,14 @@ dependencies:
   image_picker: ^1.0.7
   path_provider: ^2.1.2
   path: ^1.9.0
+  chewie: ^1.13.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: "^0.13.1"
+  flutter_native_splash: "^2.3.1"
+  video_player: ^2.8.1
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -96,3 +100,22 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+flutter_icons:
+  android: "ic_launcher" # Nama icon untuk Android
+  ios: true
+  image_path: "assets/images/logo3.jpg" # Pastikan path ini sesuai dengan lokasi gambar Anda
+  remove_alpha_ios: true # Membantu menghilangkan transparansi berlebih di iOS
+
+flutter_native_splash:
+  # Warna background HARUS putih agar menyatu dengan gambar Anda yang berlatar putih
+  color: "#ffffff" 
+  image: "assets/images/logo3.jpg" 
+
+  # Konfigurasi khusus untuk Android 12 ke atas (wajib ada)
+  android_12:
+    image: "assets/images/logo3.jpg"
+    color: "#ffffff"
+
+  # Agar splash screen tampil fullscreen (opsional)
+  fullscreen: true

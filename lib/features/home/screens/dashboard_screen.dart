@@ -1,10 +1,20 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+
 import 'package:bahasaku_v1/core/constants/colors.dart';
+import 'package:bahasaku_v1/core/api/api_client.dart';
+
+// --- IMPORT LAYAR LAIN ---
 import 'package:bahasaku_v1/features/home/screens/information_screen.dart';
+import 'package:bahasaku_v1/features/home/screens/information_detail_screen.dart'; // Pastikan file ini sudah dibuat
 import 'package:bahasaku_v1/features/home/screens/profile_screen.dart';
-// IMPORT BARU: Import file VideoToTextScreen agar bisa dipanggil
 import 'package:bahasaku_v1/features/home/screens/video_to_text_screen.dart';
+import 'package:bahasaku_v1/features/home/screens/contact_us_screen.dart';
+import 'package:bahasaku_v1/features/home/screens/text_to_video_screen.dart';
+import 'package:bahasaku_v1/features/home/screens/dictionary_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -16,18 +26,65 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0; // 0 = Home, 1 = Info, 2 = Akun
   String _userName = 'User';
+  
+  // Data Informasi Terbaru dari API
+  List<dynamic> _recentInfo = [];
+  bool _isLoadingInfo = true;
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _fetchRecentInfo(); // Ambil data info saat dashboard dibuka
   }
 
+  // --- 1. LOAD USER DATA ---
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _userName = prefs.getString('userName') ?? 'User';
     });
+  }
+
+  // --- 2. FETCH INFO TERBARU (LIMIT 2) ---
+  Future<void> _fetchRecentInfo() async {
+    try {
+      // Panggil API dengan parameter limit=2
+      final url = Uri.parse('${ApiClient.baseUrl}/information/?limit=2');
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        if (mounted) {
+          setState(() {
+            _recentInfo = json.decode(response.body);
+            _isLoadingInfo = false;
+          });
+        }
+      } else {
+        print("Gagal fetch info: ${response.statusCode}");
+        if (mounted) setState(() => _isLoadingInfo = false);
+      }
+    } catch (e) {
+      print("Error koneksi dashboard info: $e");
+      if (mounted) setState(() => _isLoadingInfo = false);
+    }
+  }
+
+  // Helper URL Gambar (Sama seperti di ProfileScreen)
+  String _constructImageUrl(String? rawPath) {
+    if (rawPath == null || rawPath.isEmpty) return '';
+    String finalUrl = rawPath;
+    if (!rawPath.startsWith('http')) {
+       String baseUrl = ApiClient.baseUrl;
+       if (baseUrl.endsWith('/api')) baseUrl = baseUrl.replaceAll('/api', '');
+       if (baseUrl.endsWith('/')) baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+       finalUrl = '$baseUrl${rawPath.startsWith('/') ? '' : '/'}$rawPath';
+    }
+    if (Platform.isAndroid) {
+      if (finalUrl.contains('localhost')) finalUrl = finalUrl.replaceAll('localhost', '10.0.2.2');
+      if (finalUrl.contains(':5000')) finalUrl = finalUrl.replaceAll(':5000', ':8080');
+    }
+    return finalUrl;
   }
 
   void _onItemTapped(int index) {
@@ -42,7 +99,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       backgroundColor: AppColors.primaryBlue,
       body: SafeArea(
         bottom: false,
-        // LOGIKA SWITCHING HALAMAN
         child: _selectedIndex == 0 
             ? _buildHomeContent() 
             : _selectedIndex == 1 
@@ -66,7 +122,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // ==========================================
-  // KONTEN HALAMAN HOME (DIPISAH KE FUNGSI)
+  // KONTEN HALAMAN HOME
   // ==========================================
   Widget _buildHomeContent() {
     return Column(
@@ -124,7 +180,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
 
-        // --- BODY MENU ---
+        // --- BODY (MENU & INFO) ---
         Expanded(
           child: Container(
             width: double.infinity,
@@ -136,6 +192,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: const EdgeInsets.only(top: 30),
               child: Column(
                 children: [
+                  // --- MENU GRID ---
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Column(
@@ -143,19 +200,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
-                            _buildMenuButton(title: 'Text to Video', imagePath: 'assets/images/menu_text_to_video.png', onTap: () {}, imageSize: 85.0),
-                            
-                            // === TOMBOL VIDEO TO TEXT ===
+                            _buildMenuButton(
+                              title: 'Text to Video', 
+                              imagePath: 'assets/images/menu_text_to_video.png', 
+                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => const TextToVideoScreen())), 
+                              imageSize: 85.0
+                            ),
                             _buildMenuButton(
                               title: 'Video to Text', 
                               imagePath: 'assets/images/menu_video_to_text.png', 
-                              onTap: () {
-                                // NAVIGASI KE SCREEN VIDEO TO TEXT
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (context) => const VideoToTextScreen()),
-                                );
-                              }, 
+                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => const VideoToTextScreen())), 
                               imageSize: 55.0
                             ),
                           ],
@@ -164,16 +218,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
-                            _buildMenuButton(title: 'Kamus Isyarat', imagePath: 'assets/images/menu_dictionary.png', onTap: () {}, imageSize: 65.0),
-                            _buildMenuButton(title: 'Hubungi Bahasaku', imagePath: 'assets/images/menu_contact.png', onTap: () {}, imageSize: 65.0),
+                            _buildMenuButton(
+                              title: 'Kamus Isyarat', 
+                              imagePath: 'assets/images/menu_dictionary.png', 
+                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => const DictionaryScreen())), 
+                              imageSize: 65.0
+                            ),
+                            _buildMenuButton(
+                              title: 'Hubungi Bahasaku', 
+                              imagePath: 'assets/images/menu_contact.png', 
+                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => const ContactUsScreen())), 
+                              imageSize: 65.0
+                            ),
                           ],
                         ),
                       ],
                     ),
                   ),
+                  
                   const SizedBox(height: 30),
                   
-                  // Bagian Info Terbaru (Preview di Home)
+                  // --- INFORMASI TERBARU (DYNAMIC) ---
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(24),
@@ -189,16 +254,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           children: [
                             const Text('Informasi Terbaru', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                             GestureDetector(
-                              // Saat klik "Lihat Semua", pindah tab ke index 1 (Informasi)
-                              onTap: () => _onItemTapped(1), 
+                              onTap: () => _onItemTapped(1), // Pindah ke tab Info
                               child: const Text('Lihat Semua', style: TextStyle(fontSize: 12, color: Colors.white70)),
                             ),
                           ],
                         ),
                         const SizedBox(height: 16),
-                        _buildInfoCard(title: 'Tips Belajar Isyarat Cepat', description: 'Pelajari dasar-dasar...', date: '12 Des 2025', icon: Icons.lightbulb_outline),
-                        const SizedBox(height: 12),
-                        _buildInfoCard(title: 'Event Komunitas Tuli', description: 'Ikuti gathering online...', date: '20 Des 2025', icon: Icons.event),
+
+                        // Loading State
+                        if (_isLoadingInfo)
+                          const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: Colors.white)))
+                        
+                        // Empty State
+                        else if (_recentInfo.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Center(child: Text("Belum ada informasi terbaru.", style: TextStyle(color: Colors.white70))),
+                          )
+                        
+                        // List Data
+                        else
+                          Column(
+                            children: _recentInfo.map((info) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _buildInfoCard(
+                                title: info['title'] ?? '',
+                                description: info['content'] ?? '',
+                                date: info['created_at'] ?? '-',
+                                imageUrl: _constructImageUrl(info['image_url']), // Kirim URL
+                                onTap: () {
+                                  // Navigasi ke Detail saat diklik
+                                  Navigator.push(context, MaterialPageRoute(builder: (c) => InformationDetailScreen(infoData: info)));
+                                }
+                              ),
+                            )).toList(),
+                          ),
+                        
                         const SizedBox(height: 30),
                       ],
                     ),
@@ -213,6 +304,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // --- WIDGET HELPERS ---
+  
   Widget _buildMenuButton({required String title, required String imagePath, required VoidCallback onTap, double imageSize = 70.0}) {
     return GestureDetector(
       onTap: onTap,
@@ -233,32 +325,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildInfoCard({required String title, required String description, required String date, required IconData icon}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            height: 45, width: 45,
-            decoration: BoxDecoration(color: const Color(0xFFE3F2FD), borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, color: AppColors.primaryBlue, size: 24),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textDark)),
-                const SizedBox(height: 4),
-                Text(description, style: const TextStyle(fontSize: 11, color: Colors.grey, height: 1.3), maxLines: 2, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 8),
-                Text(date, style: const TextStyle(fontSize: 10, color: AppColors.primaryBlue, fontWeight: FontWeight.w500)),
-              ],
+  // Updated Info Card (Terima onTap & ImageUrl)
+  Widget _buildInfoCard({
+    required String title, 
+    required String description, 
+    required String date, 
+    required String imageUrl, 
+    required VoidCallback onTap
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Thumbnail Gambar
+            Container(
+              height: 50, width: 50,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE3F2FD), 
+                borderRadius: BorderRadius.circular(10),
+                image: imageUrl.isNotEmpty 
+                  ? DecorationImage(image: NetworkImage(imageUrl), fit: BoxFit.cover)
+                  : null
+              ),
+              child: imageUrl.isEmpty 
+                ? const Icon(Icons.article, color: AppColors.primaryBlue, size: 24) 
+                : null,
             ),
-          ),
-        ],
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textDark), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 4),
+                  Text(description, style: const TextStyle(fontSize: 11, color: Colors.grey, height: 1.3), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 8),
+                  Text(date, style: const TextStyle(fontSize: 10, color: AppColors.primaryBlue, fontWeight: FontWeight.w500)),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,8 +1,68 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:bahasaku_v1/core/constants/colors.dart';
+import 'package:bahasaku_v1/core/api/api_client.dart';
+import 'package:bahasaku_v1/features/home/screens/information_detail_screen.dart';
 
-class InformationScreen extends StatelessWidget {
+class InformationScreen extends StatefulWidget {
   const InformationScreen({super.key});
+
+  @override
+  State<InformationScreen> createState() => _InformationScreenState();
+}
+
+class _InformationScreenState extends State<InformationScreen> {
+  List<dynamic> _infoList = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchAllInfo();
+  }
+
+  // --- FETCH DATA API ---
+  Future<void> _fetchAllInfo() async {
+    try {
+      // Ambil semua data (tanpa limit)
+      final url = Uri.parse('${ApiClient.baseUrl}/information/');
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        if (mounted) {
+          setState(() {
+            _infoList = json.decode(response.body);
+            _isLoading = false;
+          });
+        }
+      } else {
+        print("Gagal fetch info: ${response.statusCode}");
+        if (mounted) setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      print("Error koneksi info screen: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // Helper URL Gambar
+  String _constructImageUrl(String? rawPath) {
+    if (rawPath == null || rawPath.isEmpty) return '';
+    String finalUrl = rawPath;
+    if (!rawPath.startsWith('http')) {
+       String baseUrl = ApiClient.baseUrl;
+       if (baseUrl.endsWith('/api')) baseUrl = baseUrl.replaceAll('/api', '');
+       if (baseUrl.endsWith('/')) baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+       finalUrl = '$baseUrl${rawPath.startsWith('/') ? '' : '/'}$rawPath';
+    }
+    if (Platform.isAndroid) {
+      if (finalUrl.contains('localhost')) finalUrl = finalUrl.replaceAll('localhost', '10.0.2.2');
+      if (finalUrl.contains(':5000')) finalUrl = finalUrl.replaceAll(':5000', ':8080');
+    }
+    return finalUrl;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,51 +91,54 @@ class InformationScreen extends StatelessWidget {
               color: Colors.white,
               borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
             ),
-            child: ListView(
-              padding: const EdgeInsets.all(24),
-              children: [
-                const Text(
-                  'Informasi Terkini',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textDark,
-                  ),
-                ),
-                const Text(
-                  'Dapatkan informasi terbaru dari Bahasaku',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey,
-                  ),
-                ),
-                const SizedBox(height: 20),
+            child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _infoList.isEmpty
+                ? const Center(child: Text("Belum ada informasi terbaru", style: TextStyle(color: Colors.grey)))
+                : ListView(
+                    padding: const EdgeInsets.all(24),
+                    children: [
+                      const Text(
+                        'Informasi Terkini',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const Text(
+                        'Dapatkan informasi terbaru dari Bahasaku',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
 
-                // --- LIST KARTU INFORMASI BESAR ---
-                _buildBigInfoCard(
-                  title: 'Workshop Bahasa Isyarat',
-                  date: '15 Des 2025',
-                ),
-                const SizedBox(height: 20),
-                _buildBigInfoCard(
-                  title: 'Update Fitur Baru v2.0',
-                  date: '20 Des 2025',
-                ),
-                const SizedBox(height: 20),
-                _buildBigInfoCard(
-                  title: 'Kisah Inspiratif Teman Tuli',
-                  date: '25 Des 2025',
-                ),
-              ],
-            ),
+                      // --- LIST KARTU DARI API ---
+                      ..._infoList.map((info) => Padding(
+                        padding: const EdgeInsets.only(bottom: 20),
+                        child: GestureDetector(
+                          onTap: () {
+                            Navigator.push(context, MaterialPageRoute(builder: (c) => InformationDetailScreen(infoData: info)));
+                          },
+                          child: _buildBigInfoCard(
+                            title: info['title'] ?? '',
+                            date: info['created_at'] ?? '-',
+                            imageUrl: _constructImageUrl(info['image_url']),
+                          ),
+                        ),
+                      )).toList(),
+                    ],
+                  ),
           ),
         ),
       ],
     );
   }
 
-  // Widget Helper untuk membuat Kartu Besar (Abu-abu & Putih)
-  Widget _buildBigInfoCard({required String title, required String date}) {
+  // Widget Helper Kartu Besar (Styling Sama Persis)
+  Widget _buildBigInfoCard({required String title, required String date, required String imageUrl}) {
     return Container(
       width: double.infinity,
       height: 200, // Tinggi kartu
@@ -92,21 +155,30 @@ class InformationScreen extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Bagian Atas: Gambar Placeholder (Abu-abu)
+          // Bagian Atas: Gambar (Sekarang Dinamis)
           Expanded(
             flex: 3,
             child: Container(
+              width: double.infinity,
               decoration: BoxDecoration(
-                color: Colors.grey.shade300, // Warna abu-abu sesuai desain
+                color: Colors.grey.shade300, // Warna dasar abu-abu
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                image: imageUrl.isNotEmpty
+                    ? DecorationImage(
+                        image: NetworkImage(imageUrl),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
               ),
-              // Nanti bisa diganti Image.asset jika sudah ada gambar
-              child: const Center(
-                child: Icon(Icons.image, color: Colors.white, size: 50),
-              ),
+              child: imageUrl.isEmpty
+                  ? const Center(
+                      child: Icon(Icons.image, color: Colors.white, size: 50),
+                    )
+                  : null,
             ),
           ),
-          // Bagian Bawah: Teks Judul
+          
+          // Bagian Bawah: Teks Judul & Tanggal
           Expanded(
             flex: 2,
             child: Padding(

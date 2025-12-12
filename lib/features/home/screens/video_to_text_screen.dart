@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:bahasaku_v1/core/constants/colors.dart';
-// 1. IMPORT API CLIENT (Pastikan path-nya sesuai folder Anda)
 import 'package:bahasaku_v1/core/api/api_client.dart'; 
 
 class VideoToTextScreen extends StatefulWidget {
@@ -18,14 +17,15 @@ class VideoToTextScreen extends StatefulWidget {
 class _VideoToTextScreenState extends State<VideoToTextScreen> {
   CameraController? _cameraController;
   List<CameraDescription>? cameras;
+  
+  // Variabel baru untuk melacak index kamera (0 biasanya belakang, 1 biasanya depan)
+  int _selectedCameraIndex = 0;
+  
   bool _isCameraInitialized = false;
   bool _isScanning = false;
   String _translationResult = "Menunggu gerakan...";
   Timer? _timer;
 
-  // 2. GUNAKAN API CLIENT DISINI
-  // Kita gabungkan Base URL dengan endpoint AI
-  // Route backend Flask Anda biasanya: /ai/predict
   final Uri _apiUri = Uri.parse('${ApiClient.baseUrl}/ai/predict');
 
   @override
@@ -36,25 +36,30 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
 
   Future<void> _initializeCamera() async {
     try {
-      cameras = await availableCameras();
+      // 1. Ambil list kamera jika belum ada
+      cameras ??= await availableCameras();
+      
       if (cameras == null || cameras!.isEmpty) {
         print("Tidak ada kamera ditemukan");
         return;
       }
 
-      // Gunakan kamera depan
-      final frontCamera = cameras!.firstWhere(
-        (camera) => camera.lensDirection == CameraLensDirection.front,
-        orElse: () => cameras!.first,
-      );
+      // 2. Set default ke kamera depan saat pertama kali buka (opsional)
+      // Jika _cameraController belum pernah diinit, cari kamera depan
+      if (_cameraController == null) {
+        int frontIndex = cameras!.indexWhere((c) => c.lensDirection == CameraLensDirection.front);
+        _selectedCameraIndex = frontIndex != -1 ? frontIndex : 0;
+      }
 
+      // 3. Inisialisasi controller berdasarkan index yang dipilih
       _cameraController = CameraController(
-        frontCamera,
+        cameras![_selectedCameraIndex],
         ResolutionPreset.medium, 
         enableAudio: false,
       );
 
       await _cameraController!.initialize();
+      
       if (!mounted) return;
       setState(() {
         _isCameraInitialized = true;
@@ -64,13 +69,50 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
     }
   }
 
+  // --- FUNGSI BARU: Ganti Kamera ---
+  Future<void> _switchCamera() async {
+    if (cameras == null || cameras!.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Hanya satu kamera terdeteksi')),
+      );
+      return;
+    }
+
+    // 1. Matikan timer scanning sementara (agar tidak crash saat switch)
+    bool wasScanning = _isScanning;
+    if (wasScanning) {
+      _timer?.cancel();
+    }
+
+    // 2. Dispose controller lama
+    await _cameraController?.dispose();
+
+    // 3. Ganti Index Kamera
+    setState(() {
+      _isCameraInitialized = false;
+      _selectedCameraIndex = (_selectedCameraIndex + 1) % cameras!.length;
+    });
+
+    // 4. Inisialisasi ulang dengan index baru
+    await _initializeCamera();
+
+    // 5. Nyalakan scanning lagi jika sebelumnya sedang scanning
+    if (wasScanning && mounted) {
+      setState(() {
+        _isScanning = true;
+      });
+      _timer = Timer.periodic(const Duration(milliseconds: 1500), (timer) {
+        _captureAndSendFrame();
+      });
+    }
+  }
+
   void _toggleScanning() {
     setState(() {
       _isScanning = !_isScanning;
     });
 
     if (_isScanning) {
-      // Mulai timer ambil gambar tiap 1.5 detik
       _timer = Timer.periodic(const Duration(milliseconds: 1500), (timer) {
         _captureAndSendFrame();
       });
@@ -89,9 +131,7 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
     try {
       final XFile imageFile = await _cameraController!.takePicture();
 
-      // 3. GUNAKAN VARIABEL _apiUri YANG SUDAH KITA BUAT DI ATAS
       var request = http.MultipartRequest('POST', _apiUri);
-      
       request.files.add(await http.MultipartFile.fromPath('image', imageFile.path));
 
       var response = await request.send();
@@ -149,7 +189,23 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
             child: CameraPreview(_cameraController!),
           ),
 
-          // 2. Overlay Hasil
+          // 2. Overlay Tombol Switch (Opsional, jika ingin tombol mengambang di layar)
+          Positioned(
+            top: 20,
+            right: 20,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.flip_camera_ios, color: Colors.white),
+                onPressed: _switchCamera,
+              ),
+            ),
+          ),
+
+          // 3. Overlay Hasil & Tombol Scan
           Positioned(
             bottom: 0,
             left: 0,
