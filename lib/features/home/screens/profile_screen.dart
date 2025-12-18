@@ -39,44 +39,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadUserData();
   }
 
-  // --- 1. HELPER PENTING: Memperbaiki URL Gambar ---
-  String _constructImageUrl(String rawPath) {
-    if (rawPath.isEmpty) return '';
-
-    String finalUrl = rawPath;
-
-    // KASUS 1: Jika Backend mengirim path relatif (contoh: /static/foto...)
-    if (!rawPath.startsWith('http')) {
-       String baseUrl = ApiClient.baseUrl;
-       // Bersihkan trailing slash dan /api jika ada
-       if (baseUrl.endsWith('/api')) {
-         baseUrl = baseUrl.replaceAll('/api', '');
-       }
-       if (baseUrl.endsWith('/')) {
-         baseUrl = baseUrl.substring(0, baseUrl.length - 1);
-       }
-       finalUrl = '$baseUrl${rawPath.startsWith('/') ? '' : '/'}$rawPath';
-    }
-
-    // KASUS 2: Logika Khusus Android Emulator & Port Mapping
-    if (Platform.isAndroid) {
-      // Langkah A: Ubah localhost menjadi 10.0.2.2 (IP Emulator)
-      if (finalUrl.contains('localhost')) {
-        finalUrl = finalUrl.replaceAll('localhost', '10.0.2.2');
-      }
-
-      // Langkah B: Ubah Port 5000 ke 8080 (PENTING!)
-      // Karena di profile.jsx Anda melakukan hal yang sama (5000 -> 8080)
-      if (finalUrl.contains(':5000')) {
-        finalUrl = finalUrl.replaceAll(':5000', ':8080');
-      }
-    }
-
-    print("DEBUG FINAL IMAGE URL: $finalUrl"); 
-    return finalUrl;
-  }
-
-  // --- 2. LOAD DATA USER & SYNC DENGAN API ---
+  // --- 1. LOAD DATA USER & SYNC DENGAN API ---
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     
@@ -89,7 +52,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       String? rawPath = prefs.getString('photoProfile');
       if (rawPath != null && rawPath.isNotEmpty) {
-        _photoUrl = _constructImageUrl(rawPath);
+        // Menggunakan ApiClient.getImageUrl (Sesuai perbaikan sebelumnya)
+        _photoUrl = ApiClient.getImageUrl(rawPath);
       }
     });
 
@@ -130,7 +94,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _email = data['email'] ?? _email;
             _phone = data['phone_number'] ?? _phone;
             if (data['profile_pic_url'] != null) {
-              _photoUrl = _constructImageUrl(data['profile_pic_url']);
+              _photoUrl = ApiClient.getImageUrl(data['profile_pic_url']);
             }
           });
         }
@@ -142,12 +106,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- 3. UPLOAD FOTO ---
+  // --- 2. UPLOAD FOTO (LOGIKA DIPERBAIKI) ---
   Future<void> _pickAndUploadImage() async {
     try {
       final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
       
       if (image != null) {
+        // 1. Tampilkan Loading
         QuickAlert.show(
           context: context,
           type: QuickAlertType.loading,
@@ -156,21 +121,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
           disableBackBtn: true,
         );
 
-        await _uploadImageToServer(File(image.path));
+        // 2. Proses Upload (Tunggu sampai selesai)
+        // Fungsi ini sekarang mengembalikan TRUE jika sukses, FALSE jika gagal
+        bool isSuccess = await _uploadImageToServer(File(image.path));
         
-        if (mounted) Navigator.pop(context); // Tutup loading
+        // 3. TUTUP LOADING DULU (PENTING! Agar tidak menumpuk)
+        if (mounted) Navigator.pop(context); 
+
+        // 4. Baru Tampilkan Alert Hasil
+        if (mounted) {
+          if (isSuccess) {
+            QuickAlert.show(
+              context: context,
+              type: QuickAlertType.success,
+              title: 'Berhasil!',
+              text: 'Foto Profil telah diperbarui.',
+            );
+          } else {
+            QuickAlert.show(
+              context: context,
+              type: QuickAlertType.error,
+              title: 'Gagal',
+              text: 'Gagal mengupload foto. Silakan coba lagi.',
+            );
+          }
+        }
       }
     } catch (e) {
       print("Error picking image: $e");
     }
   }
 
-  Future<void> _uploadImageToServer(File imageFile) async {
+  // Mengubah return type menjadi Future<bool>
+  Future<bool> _uploadImageToServer(File imageFile) async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getInt('userId');
     final token = prefs.getString('token');
 
-    if (userId == null) return;
+    if (userId == null) return false;
 
     var uri = Uri.parse('${ApiClient.baseUrl}/users/$userId/photo');
     var request = http.MultipartRequest('POST', uri);
@@ -187,36 +175,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
       
       if (response.statusCode == 200) {
         final jsonResponse = json.decode(respStr);
-        
-        // Ambil URL dari response: {"user": { "profile_pic_url": "...", ... }}
         String newPhotoPath = jsonResponse['user']['profile_pic_url'];
         
-        // Simpan ke memory
+        // Simpan & Update UI
         await prefs.setString('photoProfile', newPhotoPath);
 
-        // Update UI dengan URL yang sudah dikonversi (10.0.2.2 & Port 8080)
         if (mounted) {
           setState(() {
-            _photoUrl = _constructImageUrl(newPhotoPath);
+            _photoUrl = ApiClient.getImageUrl(newPhotoPath);
           });
-
-          QuickAlert.show(
-            context: context,
-            type: QuickAlertType.success,
-            title: 'Berhasil!',
-            text: 'Foto Profil telah diperbarui.',
-          );
         }
+        return true; // SUKSES
       } else {
         print("Error Upload: $respStr");
-        if (mounted) {
-           QuickAlert.show(context: context, type: QuickAlertType.error, text: 'Gagal upload foto.');
-        }
+        return false; // GAGAL
       }
     } catch (e) {
-      if (mounted) {
-         QuickAlert.show(context: context, type: QuickAlertType.error, text: 'Koneksi Error: $e');
-      }
+      print("Koneksi Error: $e");
+      return false; // GAGAL
     }
   }
 
@@ -275,7 +251,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               border: Border.all(color: Colors.white, width: 3),
-                              // Warna background jika gambar gagal dimuat
                               color: Colors.grey.shade300, 
                               image: DecorationImage(
                                 image: (_photoUrl != null && _photoUrl!.isNotEmpty)
@@ -284,11 +259,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 fit: BoxFit.cover,
                                 onError: (exception, stackTrace) {
                                   print("Gagal menampilkan gambar di UI: $_photoUrl");
-                                  print("Error detail: $exception");
                                 },
                               ),
                             ),
-                            // Icon fallback jika foto null
                             child: (_photoUrl == null || _photoUrl!.isEmpty)
                                 ? const Icon(Icons.person, color: Colors.white, size: 40)
                                 : null,
@@ -330,7 +303,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 25),
 
-                  // Info Email & Telepon (Card Transparan)
                   _buildGlassInfoCard(
                     icon: Icons.email_outlined,
                     label: 'Email',

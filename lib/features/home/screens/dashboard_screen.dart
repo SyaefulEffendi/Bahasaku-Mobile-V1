@@ -1,3 +1,4 @@
+import 'dart:async'; // Untuk Timer
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -6,10 +7,11 @@ import 'package:http/http.dart' as http;
 
 import 'package:bahasaku_v1/core/constants/colors.dart';
 import 'package:bahasaku_v1/core/api/api_client.dart';
+import 'package:bahasaku_v1/core/services/notification_service.dart'; // Import Service Baru
 
 // --- IMPORT LAYAR LAIN ---
 import 'package:bahasaku_v1/features/home/screens/information_screen.dart';
-import 'package:bahasaku_v1/features/home/screens/information_detail_screen.dart'; // Pastikan file ini sudah dibuat
+import 'package:bahasaku_v1/features/home/screens/information_detail_screen.dart';
 import 'package:bahasaku_v1/features/home/screens/profile_screen.dart';
 import 'package:bahasaku_v1/features/home/screens/video_to_text_screen.dart';
 import 'package:bahasaku_v1/features/home/screens/contact_us_screen.dart';
@@ -27,15 +29,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0; // 0 = Home, 1 = Info, 2 = Akun
   String _userName = 'User';
   
-  // Data Informasi Terbaru dari API
+  // Data Informasi Terbaru
   List<dynamic> _recentInfo = [];
   bool _isLoadingInfo = true;
+
+  // Notifikasi & Timer
+  Timer? _notificationTimer;
+  final NotificationService _notifService = NotificationService();
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
-    _fetchRecentInfo(); // Ambil data info saat dashboard dibuka
+    
+    // Init Notifikasi
+    _notifService.initNotification();
+    
+    // Fetch data awal
+    _fetchRecentInfo(); 
+
+    // Jalankan pengecekan otomatis setiap 3 detik
+    _notificationTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      _checkForNewInfo();
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationTimer?.cancel(); // Matikan timer saat keluar aplikasi
+    super.dispose();
   }
 
   // --- 1. LOAD USER DATA ---
@@ -46,10 +68,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
-  // --- 2. FETCH INFO TERBARU (LIMIT 2) ---
+  // --- 2. FETCH INFO TERBARU UNTUK TAMPILAN ---
   Future<void> _fetchRecentInfo() async {
     try {
-      // Panggil API dengan parameter limit=2
       final url = Uri.parse('${ApiClient.baseUrl}/information/?limit=2');
       final response = await http.get(url);
 
@@ -59,9 +80,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _recentInfo = json.decode(response.body);
             _isLoadingInfo = false;
           });
+          // Simpan ID info terbaru agar tidak muncul notif saat pertama buka
+          if (_recentInfo.isNotEmpty) {
+            _saveLastSeenId(_recentInfo[0]['id']);
+          }
         }
       } else {
-        print("Gagal fetch info: ${response.statusCode}");
         if (mounted) setState(() => _isLoadingInfo = false);
       }
     } catch (e) {
@@ -70,7 +94,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // Helper URL Gambar (Sama seperti di ProfileScreen)
+  // --- 3. LOGIKA CEK NOTIFIKASI ---
+  Future<void> _checkForNewInfo() async {
+    try {
+      // Ambil 1 info paling baru
+      final url = Uri.parse('${ApiClient.baseUrl}/information/?limit=1');
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        List<dynamic> data = json.decode(response.body);
+        if (data.isNotEmpty) {
+          int latestId = data[0]['id'];
+          String title = data[0]['title'];
+
+          // Cek ID terakhir yang disimpan di HP
+          final prefs = await SharedPreferences.getInstance();
+          int lastSeenId = prefs.getInt('last_seen_info_id') ?? 0;
+
+          // Jika ID dari server LEBIH BESAR dari yang disimpan -> Ada Info Baru!
+          if (latestId > lastSeenId) {
+            
+            // Tampilkan Notifikasi
+            _notifService.showNotification(
+              title: 'Informasi Baru!',
+              body: title,
+            );
+
+            // Update ID terakhir & Refresh tampilan dashboard
+            await _saveLastSeenId(latestId);
+            _fetchRecentInfo(); 
+          }
+        }
+      }
+    } catch (e) {
+      print("Gagal cek notifikasi: $e");
+    }
+  }
+
+  Future<void> _saveLastSeenId(int id) async {
+    final prefs = await SharedPreferences.getInstance();
+    // Kita hanya update jika ID nya lebih besar (maju)
+    int current = prefs.getInt('last_seen_info_id') ?? 0;
+    if (id > current) {
+      await prefs.setInt('last_seen_info_id', id);
+    }
+  }
+
+  // Helper URL Gambar
   String _constructImageUrl(String? rawPath) {
     if (rawPath == null || rawPath.isEmpty) return '';
     String finalUrl = rawPath;
@@ -121,9 +191,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ==========================================
-  // KONTEN HALAMAN HOME
-  // ==========================================
   Widget _buildHomeContent() {
     return Column(
       children: [
@@ -254,25 +321,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           children: [
                             const Text('Informasi Terbaru', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                             GestureDetector(
-                              onTap: () => _onItemTapped(1), // Pindah ke tab Info
+                              onTap: () => _onItemTapped(1), 
                               child: const Text('Lihat Semua', style: TextStyle(fontSize: 12, color: Colors.white70)),
                             ),
                           ],
                         ),
                         const SizedBox(height: 16),
 
-                        // Loading State
                         if (_isLoadingInfo)
                           const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: Colors.white)))
-                        
-                        // Empty State
                         else if (_recentInfo.isEmpty)
                           const Padding(
                             padding: EdgeInsets.all(20),
                             child: Center(child: Text("Belum ada informasi terbaru.", style: TextStyle(color: Colors.white70))),
                           )
-                        
-                        // List Data
                         else
                           Column(
                             children: _recentInfo.map((info) => Padding(
@@ -281,9 +343,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 title: info['title'] ?? '',
                                 description: info['content'] ?? '',
                                 date: info['created_at'] ?? '-',
-                                imageUrl: _constructImageUrl(info['image_url']), // Kirim URL
+                                imageUrl: _constructImageUrl(info['image_url']),
                                 onTap: () {
-                                  // Navigasi ke Detail saat diklik
                                   Navigator.push(context, MaterialPageRoute(builder: (c) => InformationDetailScreen(infoData: info)));
                                 }
                               ),
@@ -303,8 +364,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // --- WIDGET HELPERS ---
-  
   Widget _buildMenuButton({required String title, required String imagePath, required VoidCallback onTap, double imageSize = 70.0}) {
     return GestureDetector(
       onTap: onTap,
@@ -325,7 +384,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // Updated Info Card (Terima onTap & ImageUrl)
   Widget _buildInfoCard({
     required String title, 
     required String description, 
@@ -341,7 +399,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Thumbnail Gambar
             Container(
               height: 50, width: 50,
               decoration: BoxDecoration(

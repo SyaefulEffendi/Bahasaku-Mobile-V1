@@ -38,6 +38,7 @@ dependencies:
   http: ^1.6.0
   quickalert: ^1.1.0
   intl: ^0.20.2
+  flutter_local_notifications: ^18.0.0
   
   # Dependencies tambahan untuk fitur Video to Text (Kamera & File)
   camera: ^0.10.6

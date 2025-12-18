@@ -18,11 +18,14 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
   CameraController? _cameraController;
   List<CameraDescription>? cameras;
   
-  // Variabel baru untuk melacak index kamera (0 biasanya belakang, 1 biasanya depan)
   int _selectedCameraIndex = 0;
   
   bool _isCameraInitialized = false;
   bool _isScanning = false;
+  
+  bool _isFlashOn = false; 
+  bool _isProcessing = false; 
+
   String _translationResult = "Menunggu gerakan...";
   Timer? _timer;
 
@@ -36,74 +39,103 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
 
   Future<void> _initializeCamera() async {
     try {
-      // 1. Ambil list kamera jika belum ada
       cameras ??= await availableCameras();
       
       if (cameras == null || cameras!.isEmpty) {
-        print("Tidak ada kamera ditemukan");
+        debugPrint("Tidak ada kamera ditemukan");
         return;
       }
 
-      // 2. Set default ke kamera depan saat pertama kali buka (opsional)
-      // Jika _cameraController belum pernah diinit, cari kamera depan
       if (_cameraController == null) {
         int frontIndex = cameras!.indexWhere((c) => c.lensDirection == CameraLensDirection.front);
         _selectedCameraIndex = frontIndex != -1 ? frontIndex : 0;
       }
 
-      // 3. Inisialisasi controller berdasarkan index yang dipilih
       _cameraController = CameraController(
         cameras![_selectedCameraIndex],
+        // PERBAIKAN 1: Gunakan ResolutionPreset.medium (sekitar 480p/720p)
+        // Ini jauh lebih cepat diproses oleh YOLO dan lebih cepat diupload
         ResolutionPreset.medium, 
         enableAudio: false,
+        imageFormatGroup: Platform.isAndroid 
+            ? ImageFormatGroup.jpeg 
+            : ImageFormatGroup.bgra8888,
       );
 
       await _cameraController!.initialize();
       
+      try {
+        await _cameraController!.setFlashMode(FlashMode.off);
+      } catch (_) {}
+
+      // Reset Zoom ke 1.0
+      try {
+        double minZoom = await _cameraController!.getMinZoomLevel();
+        double maxZoom = await _cameraController!.getMaxZoomLevel();
+        double targetZoom = 1.0; 
+        if (targetZoom < minZoom) targetZoom = minZoom;
+        if (targetZoom > maxZoom) targetZoom = maxZoom;
+        await _cameraController!.setZoomLevel(targetZoom);
+      } catch (e) {
+        debugPrint("Gagal set zoom: $e");
+      }
+
       if (!mounted) return;
       setState(() {
         _isCameraInitialized = true;
+        _isFlashOn = false;
       });
     } catch (e) {
-      print("Error inisialisasi kamera: $e");
+      debugPrint("Error inisialisasi kamera: $e");
     }
   }
 
-  // --- FUNGSI BARU: Ganti Kamera ---
   Future<void> _switchCamera() async {
-    if (cameras == null || cameras!.length < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Hanya satu kamera terdeteksi')),
-      );
-      return;
-    }
+    if (cameras == null || cameras!.isEmpty) return;
 
-    // 1. Matikan timer scanning sementara (agar tidak crash saat switch)
     bool wasScanning = _isScanning;
     if (wasScanning) {
       _timer?.cancel();
     }
 
-    // 2. Dispose controller lama
     await _cameraController?.dispose();
 
-    // 3. Ganti Index Kamera
+    CameraDescription currentCamera = cameras![_selectedCameraIndex];
+    int newIndex = 0;
+
+    if (currentCamera.lensDirection == CameraLensDirection.front) {
+      newIndex = cameras!.indexWhere((c) => c.lensDirection == CameraLensDirection.back);
+      if (newIndex == -1) newIndex = 0;
+    } else {
+      newIndex = cameras!.indexWhere((c) => c.lensDirection == CameraLensDirection.front);
+      if (newIndex == -1) newIndex = 0;
+    }
+
     setState(() {
       _isCameraInitialized = false;
-      _selectedCameraIndex = (_selectedCameraIndex + 1) % cameras!.length;
+      _selectedCameraIndex = newIndex;
     });
 
-    // 4. Inisialisasi ulang dengan index baru
     await _initializeCamera();
 
-    // 5. Nyalakan scanning lagi jika sebelumnya sedang scanning
     if (wasScanning && mounted) {
+      _startScanning(); // Gunakan fungsi helper untuk memulai scan
+    }
+  }
+
+  Future<void> _toggleFlash() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) return;
+
+    try {
+      FlashMode mode = _isFlashOn ? FlashMode.off : FlashMode.torch;
+      await _cameraController!.setFlashMode(mode);
       setState(() {
-        _isScanning = true;
+        _isFlashOn = !_isFlashOn;
       });
-      _timer = Timer.periodic(const Duration(milliseconds: 1500), (timer) {
-        _captureAndSendFrame();
-      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal menyalakan flash')),
+      );
     }
   }
 
@@ -113,28 +145,51 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
     });
 
     if (_isScanning) {
-      _timer = Timer.periodic(const Duration(milliseconds: 1500), (timer) {
-        _captureAndSendFrame();
-      });
+      _startScanning();
     } else {
       _timer?.cancel();
       setState(() {
         _translationResult = "Scan berhenti.";
+        _isProcessing = false; 
       });
     }
+  }
+
+  // Fungsi Helper untuk memulai timer
+  void _startScanning() {
+    // PERBAIKAN 2: Interval dipercepat jadi 400ms - 500ms
+    // Web pakai 500ms, kita set 450ms biar terasa responsif tapi aman
+    _timer = Timer.periodic(const Duration(milliseconds: 450), (timer) {
+      _captureAndSendFrame();
+    });
   }
 
   Future<void> _captureAndSendFrame() async {
     if (_cameraController == null || !_cameraController!.value.isInitialized) return;
     if (_cameraController!.value.isTakingPicture) return;
+    
+    // Jika masih processing frame sebelumnya, skip frame ini (jangan tumpuk antrian)
+    if (_isProcessing) return;
+
+    setState(() {
+      _isProcessing = true;
+    });
 
     try {
+      // takePicture pada ResolutionPreset.medium jauh lebih cepat daripada High
       final XFile imageFile = await _cameraController!.takePicture();
 
+      // Kirim ke API
       var request = http.MultipartRequest('POST', _apiUri);
-      request.files.add(await http.MultipartFile.fromPath('image', imageFile.path));
+      
+      // Kita kirim file langsung
+      request.files.add(await http.MultipartFile.fromPath(
+        'image', 
+        imageFile.path,
+      ));
 
-      var response = await request.send();
+      // Gunakan timeout agar jika jaringan lemot, UI tidak "hang"
+      var response = await request.send().timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
         final respStr = await response.stream.bytesToString();
@@ -144,16 +199,25 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
         
         if (mounted) {
           setState(() {
+            // Update teks hanya jika ada hasil, atau kosongkan jika logika backend mengharuskan
             if (detectedText.isNotEmpty) {
               _translationResult = detectedText;
             }
           });
         }
-      } else {
-        print("Server Error: ${response.statusCode}");
-      }
+      } 
+      
+      // Hapus file temporary secepat mungkin
+      File(imageFile.path).delete().catchError((e) => null);
+
     } catch (e) {
-      print("Error capturing/sending: $e");
+      debugPrint("Skip frame (network/camera busy): $e");
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
     }
   }
 
@@ -166,12 +230,14 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_isCameraInitialized) {
+    if (!_isCameraInitialized || _cameraController == null) {
       return const Scaffold(
         backgroundColor: Colors.black,
         body: Center(child: CircularProgressIndicator(color: AppColors.primaryBlue)),
       );
     }
+
+    final bool isBackCamera = cameras![_selectedCameraIndex].lensDirection == CameraLensDirection.back;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -182,30 +248,70 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
       ),
       body: Stack(
         children: [
-          // 1. Tampilan Kamera
-          SizedBox(
-            height: MediaQuery.of(context).size.height,
-            width: MediaQuery.of(context).size.width,
+          Center(
             child: CameraPreview(_cameraController!),
           ),
 
-          // 2. Overlay Tombol Switch (Opsional, jika ingin tombol mengambang di layar)
+          // --- Overlay Indikator Proses (Opsional, agar user tau sistem bekerja) ---
+          if (_isScanning)
           Positioned(
             top: 20,
-            right: 20,
+            left: 20,
             child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.5),
-                shape: BoxShape.circle,
+                color: _isProcessing ? Colors.orange.withOpacity(0.8) : Colors.green.withOpacity(0.8),
+                borderRadius: BorderRadius.circular(20),
               ),
-              child: IconButton(
-                icon: const Icon(Icons.flip_camera_ios, color: Colors.white),
-                onPressed: _switchCamera,
+              child: Row(
+                children: [
+                  Icon(_isProcessing ? Icons.sync : Icons.radar, color: Colors.white, size: 16),
+                  const SizedBox(width: 8),
+                  Text(
+                    _isProcessing ? "Menganalisa..." : "Mendeteksi",
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ],
               ),
             ),
           ),
 
-          // 3. Overlay Hasil & Tombol Scan
+          Positioned(
+            top: 20,
+            right: 20,
+            child: Column(
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(bottom: 15),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.flip_camera_ios, color: Colors.white),
+                    onPressed: _switchCamera,
+                  ),
+                ),
+                if (isBackCamera)
+                  Container(
+                    decoration: BoxDecoration(
+                      color: _isFlashOn 
+                          ? Colors.yellow.withOpacity(0.8) 
+                          : Colors.black.withOpacity(0.5),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: Icon(
+                        _isFlashOn ? Icons.flash_on : Icons.flash_off, 
+                        color: _isFlashOn ? Colors.black : Colors.white
+                      ),
+                      onPressed: _toggleFlash,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
           Positioned(
             bottom: 0,
             left: 0,
