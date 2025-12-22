@@ -43,7 +43,7 @@ class _TextToVideoScreenState extends State<TextToVideoScreen> {
   // --- 1. FETCH DATA DARI API ---
   Future<void> _fetchAllVocabs() async {
     try {
-      // Endpoint sesuai backend route: GET /api/kosa-kata/
+      // Endpoint route: GET /api/kosa-kata/
       final url = Uri.parse('${ApiClient.baseUrl}/kosa-kata/');
       final response = await http.get(url);
 

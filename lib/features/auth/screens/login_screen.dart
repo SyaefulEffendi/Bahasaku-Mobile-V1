@@ -244,9 +244,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                               final prefs = await SharedPreferences.getInstance();
                               
-                              // ====================================================
                               // PENYIMPANAN DATA LENGKAP (UPDATE)
-                              // ====================================================
                               await prefs.setString('token', token);
                               await prefs.setInt('userId', user['id']);
                               await prefs.setString('userName', user['full_name']);
@@ -268,12 +266,11 @@ class _LoginScreenState extends State<LoginScreen> {
                               } else {
                                 await prefs.setString('phoneNumber', 'Tidak ada No Telepon');
                               }
-
+                              
                               // Simpan Foto Profil
                               if (user['profile_pic_url'] != null) {
                                 await prefs.setString('photoProfile', user['profile_pic_url']);
                               }
-                              // ====================================================
 
                               if (context.mounted) {
                                 await QuickAlert.show(
