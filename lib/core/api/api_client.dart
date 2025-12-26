@@ -1,6 +1,6 @@
 class ApiClient {
   // --- Pake HP Fisik (Wireless LAN adapter Wi-Fi) ---
-  static const String ipAddress = '192.168.0.104'; 
+  static const String ipAddress = '192.168.1.14'; 
 
   // --- Pake Android Studio Emulator ---
   // static const String ipAddress = '10.0.2.2';

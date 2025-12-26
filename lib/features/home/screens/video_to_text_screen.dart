@@ -53,8 +53,6 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
 
       _cameraController = CameraController(
         cameras![_selectedCameraIndex],
-        // PERBAIKAN 1: Gunakan ResolutionPreset.medium (sekitar 480p/720p)
-        // Ini jauh lebih cepat diproses oleh YOLO dan lebih cepat diupload
         ResolutionPreset.medium, 
         enableAudio: false,
         imageFormatGroup: Platform.isAndroid 
@@ -119,7 +117,7 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
     await _initializeCamera();
 
     if (wasScanning && mounted) {
-      _startScanning(); // Gunakan fungsi helper untuk memulai scan
+      _startScanning();
     }
   }
 
@@ -155,10 +153,7 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
     }
   }
 
-  // Fungsi Helper untuk memulai timer
   void _startScanning() {
-    // PERBAIKAN 2: Interval dipercepat jadi 400ms - 500ms
-    // Web pakai 500ms, kita set 450ms biar terasa responsif tapi aman
     _timer = Timer.periodic(const Duration(milliseconds: 450), (timer) {
       _captureAndSendFrame();
     });
@@ -168,7 +163,6 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
     if (_cameraController == null || !_cameraController!.value.isInitialized) return;
     if (_cameraController!.value.isTakingPicture) return;
     
-    // Jika masih processing frame sebelumnya, skip frame ini (jangan tumpuk antrian)
     if (_isProcessing) return;
 
     setState(() {
@@ -176,19 +170,15 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
     });
 
     try {
-      // takePicture pada ResolutionPreset.medium jauh lebih cepat daripada High
       final XFile imageFile = await _cameraController!.takePicture();
 
-      // Kirim ke API
       var request = http.MultipartRequest('POST', _apiUri);
       
-      // Kita kirim file langsung
       request.files.add(await http.MultipartFile.fromPath(
         'image', 
         imageFile.path,
       ));
 
-      // Gunakan timeout agar jika jaringan lemot, UI tidak "hang"
       var response = await request.send().timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
@@ -199,7 +189,6 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
         
         if (mounted) {
           setState(() {
-            // Update teks hanya jika ada hasil, atau kosongkan jika logika backend mengharuskan
             if (detectedText.isNotEmpty) {
               _translationResult = detectedText;
             }
@@ -207,7 +196,6 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
         }
       } 
       
-      // Hapus file temporary secepat mungkin
       File(imageFile.path).delete().catchError((e) => null);
 
     } catch (e) {
@@ -248,11 +236,75 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
       ),
       body: Stack(
         children: [
+          // 1. LAYER KAMERA (Preview Fullscreen)
           Center(
             child: CameraPreview(_cameraController!),
           ),
 
-          // --- Overlay Indikator Proses (Opsional, agar user tau sistem bekerja) ---
+          // 2. LAYER OVERLAY (Membuat area luar kotak menjadi gelap)
+          ColorFiltered(
+            colorFilter: ColorFilter.mode(
+              Colors.black.withOpacity(0.5), 
+              BlendMode.srcOut // Teknik membuat 'lubang' transparan
+            ),
+            child: Stack(
+              children: [
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.transparent,
+                    backgroundBlendMode: BlendMode.dstOut,
+                  ),
+                ),
+                Center(
+                  child: Container(
+                    height: 280, // Ukuran Kotak Vertikal
+                    width: 280,  // Ukuran Kotak Horizontal
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 3. LAYER BORDER & TEXT GUIDE (Bingkai Asli)
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Teks Petunjuk di atas kotak
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(
+                    "Letakkan tangan di dalam kotak",
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.9),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      shadows: const [Shadow(blurRadius: 4, color: Colors.black)],
+                    ),
+                  ),
+                ),
+                // Kotak Bingkai
+                Container(
+                  height: 280, 
+                  width: 280,
+                  decoration: BoxDecoration(
+                    // Border Putih saat diam, Hijau saat Scan aktif
+                    border: Border.all(
+                      color: _isScanning ? Colors.greenAccent : Colors.white, 
+                      width: 3
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 4. INDIKATOR STATUS (Pojok Kiri Atas)
           if (_isScanning)
           Positioned(
             top: 20,
@@ -276,6 +328,7 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
             ),
           ),
 
+          // 5. TOMBOL CONTROLLER (Flash & Switch Camera - Kanan Atas)
           Positioned(
             top: 20,
             right: 20,
@@ -312,6 +365,7 @@ class _VideoToTextScreenState extends State<VideoToTextScreen> {
             ),
           ),
 
+          // 6. PANEL HASIL TERJEMAHAN (Bawah)
           Positioned(
             bottom: 0,
             left: 0,
